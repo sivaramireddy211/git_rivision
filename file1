@@ -1,0 +1,80 @@
+
+b name :  airtel-b2badmin-api.war (airtel.in)
+
+
+shell scripting at execute shell (war deploy in weblogic servers)
+
+export PATH=/app/software/apache-maven-3.2.1/bin:$PATH
+checkoutPath=$WORKSPACE/b2bAdmin
+buildpath1=$checkoutPath/airtel-b2b-commons-utilities
+buildpath2=$checkoutPath/airtel-b2badmin-build
+CLUSTER=$Target_cluster
+
+cd $buildpath1
+mvn clean install -Dmaven.test.skip=true
+
+cd $buildpath2
+mvn clean install -Dmaven.test.skip=true
+
+cd $checkoutPath/airtel-b2badmin-api/target/
+
+scp airtel-b2badmin-api.war oracle@$CLUSTER:/app/forDeploy/.
+
+
+
+if [ "$CLUSTER" = "10.5.252.13" ]
+then
+	scp -r $checkoutPath/airtel-b2badmin-core/src/main/resources/app/online/b2badminAPI/config/* oracle@10.5.252.13:/app/online/b2badminAPI/config/
+	scp -r $checkoutPath/airtel-b2badmin-core/src/main/resources/app/online/b2badminAPI/config/* oracle@10.5.252.14:/app/online/b2badminAPI/config/
+	scp -r $checkoutPath/airtel-b2badmin-core/src/main/resources/app/online/b2badminAPI/config/* oracle@10.5.252.15:/app/online/b2badminAPI/config/
+fi
+
+if [ "$CLUSTER" = "10.5.252.16" ]
+then
+	scp -r $checkoutPath/airtel-b2badmin-core/src/main/resources/app/online/b2badminAPI/config/* oracle@10.5.252.16:/app/online/b2badminAPI/config/
+	scp -r $checkoutPath/airtel-b2badmin-core/src/main/resources/app/online/b2badminAPI/config/* oracle@10.5.252.17:/app/online/b2badminAPI/config/
+	scp -r $checkoutPath/airtel-b2badmin-core/src/main/resources/app/online/b2badminAPI/config/* oracle@10.5.252.18:/app/online/b2badminAPI/config/
+fi
+
+
+
+ssh oracle@$CLUSTER<<'ENDSSH'
+buildPATH=/app/forDeploy
+echo "Starting deployment .."	
+
+
+############################################################
+warNAME=airtel-b2badmin-api.war
+ADDRESS=`hostname -I`
+add=${ADDRESS::-1}
+portNo=7001
+cat <<EOF > $buildPATH/wardetails.txt
+adminURL='t3://$add:$portNo'
+userNAME=weblogic
+passWORD=welcome1
+appNAME=airtel-b2badmin-api
+warPATH=$buildPATH/$warNAME
+##We get cluster value from .base_profile file from server oracle user 
+##cluster=Online_Prod2_Cluster
+JAVA_HOME=/app/java/jdk1.8.0_91/
+WEBLOGIC_HOME=/app/weblogic/Oracle/Middleware/Oracle_Home/wlserver/server
+EOF
+source $buildPATH/wardetails.txt
+echo $userNAME
+echo $passWORD
+echo $appNAME
+echo $warPATH
+echo $JAVA_HOME
+echo $WEBLOGIC_HOME
+echo $adminURL
+echo $cluster
+
+
+. $WEBLOGIC_HOME/bin/setWLSEnv.sh
+
+java weblogic.Deployer -adminurl $adminURL -username $userNAME -password $passWORD -name $appNAME -targets $cluster -undeploy
+
+cd /app/weblogic/domains/online_domain/servers/AdminServer
+
+java weblogic.Deployer -adminurl $adminURL -username $userNAME -password $passWORD -name $appNAME -targets $cluster -redeploy -source $warPATH
+ENDSSH
